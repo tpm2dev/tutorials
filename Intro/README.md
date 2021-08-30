@@ -856,6 +856,15 @@ session.
 > sessions as inputs to any TPM command (some TPM commands have no input
 > handle parameters, some have one, and some have two).
 
+### Proving Knowledge of a Shared `authValue`
+
+Each session used in a command can prove the caller's (and TPM's)
+knowledge of the session's `bind` object's `authValue`.  As well, the
+`TPM2_PolicySecret()` command can be used to inject the `authValue` of
+arbitrary objects into the session's state computations, once again
+having the caller prove its knowledge of the `authValue`, and the TPM
+will prove its knowledge of it back to the caller on its response.
+
 ## Restricted Cryptographic Keys
 
 Cryptographic keys can either be unrestricted or restricted.

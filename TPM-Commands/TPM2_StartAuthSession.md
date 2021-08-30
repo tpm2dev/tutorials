@@ -3,16 +3,27 @@
 This command starts a session that can be used for authorization and/or
 encryption.
 
+Recall that every command can have one or more input sessions.  One
+session may provide keying for encryption of the first `TPM22B_*`
+command parameter and/or response parameter.  Every entity that requires
+authorization also requires an authorization session handle.
+
+Every session has state that gets updated with every command, such as
+keying material, nonces, etc.
+
 ## Inputs
 
  - `TPMI_DH_OBJECT+ tpmKey`
 
-   This optional _input_ parameter specifies the handle of a loaded RSA
-   decryption key or of a loaded ECDH key.
+   This optional _input_ parameter specifies the handle of a loaded key
+   object to be used for key exchanged with the TPM.  The `tpmKey` must
+   be an RSA decryption key (in which case RSA key transport will be
+   used for key exchange) or a ECDH key (in which case ECDH key
+   agreement will be used for key exchange).
 
  - `TPMI_DH_ENTITY+ bind`
 
-   This parameter, if not null, references a loaded entity whose
+   This optional parameter, if given, references a loaded entity whose
    `authValue` will be used in the session key computation.
 
  - `TPM2B_NONCE nonceCaller`
@@ -21,8 +32,8 @@ encryption.
 
  - `TPM2B_ENCRYPTED_SECRET encryptedSalt`
 
-   This optional _input_ parameter must be present if `tpmKey` is
-   present.
+   This optional _input_ parameter is a key exchange message that must
+   be present if `tpmKey` is present.
 
    If `tpmKey` is an RSA decryption key then `encryptedSalt` must be an
    RSA OEAP ciphertext that will be decrypted with the `tpmKey`.  The
@@ -33,7 +44,12 @@ encryption.
    symmetric AES-CFB encryption keys will be derived.
 
  - `TPM_SE sessionType`
+
  - `TPMT_SYM_DEF+ symmetric`
+
+   The algorithm and key size for command and response parameter
+   encryption.
+
  - `TPMI_ALG_HASH authHash`
 
    A hash algorithm for the key derivation function.
@@ -54,18 +70,22 @@ The `sessionType` input parameter must be one of:
  - `TPM_SE_POLICY`
  - `TPM_SE_TRIAL`
 
-### HMAC Sessions
+## HMAC Sessions
 
 If the session is to be an HMAC session authenticating knowledge of some
 entity's `authValue`, then the `bind` argument must be provided.
 
-### Authorization Sessions
+Note that the `TPM2_PolicySecret()` command can reference another entity
+whose `authValue` will be used to update the the session's keys.  This
+way the caller can prove knowledge of arbitrarily many `authValues`.
+
+## Authorization Sessions
 
 For policy sessions, the caller should now call one or more
 `TPM2_Policy*()` commands to execute the policy identified by the
 `authPolicy` value of the entity to be accessed via this session.
 
-### Trial Policies
+## Trial Policies
 
 For trial sessions, the caller should now call one or more
 `TPM2_Policy*()` commands as will be used in future actual policy
@@ -73,7 +93,7 @@ sessions, then extract the `policyDigest` of the
 session after the last policy command -- that will be a value
 suitablefor use as an `authPolicy` value for TPM entities.
 
-### Encryption Sessions
+## Encryption Sessions
 
 > All sessions can be used for encryption that were created with either
 > or both of the `bind` input parameter and the pair of input parameters
@@ -144,6 +164,34 @@ that itself used the EK as its `tpmKey` input.
 > A non-null `bind` parameter can be used to create a "bound" session
 > that can be used to satisfy HMAC-based authorization for specific
 > objects.  We will not cover this in detail here.
+
+## Establishing Trust in a TPM
+
+Given a computer that has a discrete TPM, how does software running on
+that computer establish trust in the dTPM?
+
+This is an important question since failure to do this will render the
+computer vulnerable to [certain attacks](https://dolosgroup.io/blog/2021/7/9/from-stolen-laptop-to-inside-the-company-network)
+on it.
+
+Use of encryption sessions is a must.  These must be keyed by using a
+key exchange with a public key of the dTPM's that is accessible to the
+caller.  For example, the dTPM's `EKpub`, or any key object with the
+`decrypt`, `fixedTPM`, and `fixedParent` attributes, but not the
+`stClear` attribute, and preferably a primary.  The caller must reliably
+remember this public key as early as possible.  The caller must also
+validate the dTPM's `EKcert` as early as possible (especially before the
+endorsement hierarchy is made unavailable).
+
+Unless the caller has a priori knowledge of that public key for the dTPM
+prior to the first time the caller speaks to the dTPM, then the caller
+will be vulnerable to the dTPM being replaced.
+
+In an ideal world the BIOS would store this public key in protected
+(((E)E)P)ROM, the BIOS would always use encrypted sessions for RTM, and
+the BIOS would make this public key available to applications that wish
+to use the dTPM.  Where this is not available, online attestation
+protocols can serve to furnish or confirm this key to the application.
 
 ## References
 
